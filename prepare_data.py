@@ -34,6 +34,7 @@ def words_to_int_arrays(words):
 
 def generate_pattern_matrix(words1, words2):
     """
+    https://github.com/3b1b/videos/blob/master/_2022/wordle/simulations.py
     A pattern for two words represents the wordle-similarity
     pattern (grey -> 0, yellow -> 1, green -> 2) but as an integer
     between 0 and 3^5. Reading this integer in ternary gives the
