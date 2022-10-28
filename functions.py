@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Oct 28 13:00:39 2022
+
+@author: will
+"""
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -71,3 +78,73 @@ def wordle(matrix,index,top=0.6,count=2309):
         return min_
 
 wordle(matrix,np.arange(2309))
+
+
+class Node():
+    # Node class will give a explicit decision tree of how to act in each scenario
+    def __init__(self,index,policy):
+        self.index = index
+        self.policy = policy
+        self.IsLeaf = index.shape[0]==1
+        self.action = None
+        self.children = {}
+        
+    def set_action(self):
+        if not self.IsLeaf and self.action is not None:
+            self.action = self.policy(matrix,self.index)
+    
+    def recur(self):
+        if not self.IsLeaf:
+            if self.action is None:
+                self.set_action()
+            tmp = matrix[self.action]
+            unq = np.unique(tmp)
+            for u in unq:
+                tmp2 = tmp == u
+                node = Node(self.index[tmp2],self.policy)
+                node.recur()
+                self.children[u] = node
+        
+        
+def policy_lookup(matrix,index):
+    # return the best action given the current state matrix
+    # assume a value function mapping, tuple(index) -> val
+    min_,argmin = np.Inf,np.Inf
+    count = matrix.shape[1]
+    best = np.log2(count)
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        if entro == best:
+            return row
+        else:
+            guess_row = 1
+            finish_ind = True
+            for p,u,c in zip(ps,unq,counts):
+                tmp2 = tmp == u
+                if index[tmp2] in mapping:
+                    guess_row += p * mapping[index[tmp2]]
+                else:
+                    finish_ind = False
+                    break
+            if finish_ind and (guess_row < min_):
+                min_ = guess_row
+                argmin = row
+                if min_ == 1:
+                    return argmin
+    return argmin
+
+
+
+
+
+
+
+
+
+
+
+
+
