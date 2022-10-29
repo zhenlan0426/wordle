@@ -118,6 +118,7 @@ def policy_lookup(matrix,index):
     min_,argmin = np.Inf,np.Inf
     count = matrix.shape[1]
     best = np.log2(count)
+    best_val = mapping[tuple(index)] if len(index)>2 else len(index)-1
     for row in range(12953):
         tmp = matrix[row]
         unq,counts = np.unique(tmp,return_counts=True)
@@ -145,7 +146,6 @@ def policy_lookup(matrix,index):
             if finish_ind and (guess_row < min_):
                 min_ = guess_row
                 argmin = row
-                if min_ == 1:
+                if min_ == best_val:
                     return argmin
-    return argmin
 
