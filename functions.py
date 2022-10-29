@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Oct 28 13:00:39 2022
+
+@author: will
+"""
+
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -7,7 +14,7 @@ Created on Tue Oct 25 11:04:17 2022
 """
 import numpy as np
 import pickle
-matrix = np.load('/home/will/Desktop/LC/wordle/matrix.npy')
+matrix = np.load('matrix.npy')
 # %timeit groupby1(matrix,5)
 # %timeit groupby2(matrix,5)
 # %timeit groupby1(matrix[:,:500],1)
@@ -16,7 +23,7 @@ matrix = np.load('/home/will/Desktop/LC/wordle/matrix.npy')
 # %timeit groupby2(matrix[:,:100],1)
 
 # mapping = dict()
-with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'rb') as f:
+with open('mapping.pkl', 'rb') as f:
     mapping = pickle.load(f)
 #l = []
 def entropy(p):
@@ -73,39 +80,40 @@ def wordle(matrix,index,top=0.6,count=2309):
         mapping[tuple(index)] = min_
         return min_
 
-wordle(matrix,np.arange(2309))
-with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
-    pickle.dump(mapping, f)
+# wordle(matrix,np.arange(2309))
+# with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
+#     pickle.dump(mapping, f)
+
 
 
 class Node():
     # Node class will give a explicit decision tree of how to act in each scenario
-    def __init__(self,index,policy):
+    def __init__(self,matrix,index,policy):
         self.index = index
         self.policy = policy
         self.IsLeaf = index.shape[0]==1
         self.action = None
         self.children = {}
+        self.matrix = matrix
         
     def set_action(self):
-        if not self.IsLeaf and self.action is not None:
-            self.action = self.policy(matrix,self.index)
+        self.action = self.policy(self.matrix,self.index)
     
     def recur(self):
         if not self.IsLeaf:
             if self.action is None:
                 self.set_action()
-            tmp = matrix[self.action]
+            tmp = self.matrix[self.action]
             unq = np.unique(tmp)
             for u in unq:
                 tmp2 = tmp == u
-                node = Node(self.index[tmp2],self.policy)
+                node = Node(self.matrix[:,tmp2],self.index[tmp2],self.policy)
                 node.recur()
                 self.children[u] = node
         
         
 def policy_lookup(matrix,index):
-    # return the best action given the current state matrix
+    # return the best action given the original matrix and current index
     # assume a value function mapping, tuple(index) -> val
     min_,argmin = np.Inf,np.Inf
     count = matrix.shape[1]
@@ -117,13 +125,20 @@ def policy_lookup(matrix,index):
         entro = entropy(ps)
         if entro == best:
             return row
-        else:
+        elif entro > 0:
             guess_row = 1
             finish_ind = True
             for p,u,c in zip(ps,unq,counts):
                 tmp2 = tmp == u
-                if index[tmp2] in mapping:
-                    guess_row += p * mapping[index[tmp2]]
+                index2 = index[tmp2]
+                len_ = len(index2)
+                if tuple(index2) in mapping:
+                    guess_row += p * mapping[tuple(index2)]
+                # short len_ results were not saved in mapping
+                elif len_ == 1:
+                    continue
+                elif len_ == 2:
+                    guess_row += p
                 else:
                     finish_ind = False
                     break
@@ -133,5 +148,4 @@ def policy_lookup(matrix,index):
                 if min_ == 1:
                     return argmin
     return argmin
-
 
