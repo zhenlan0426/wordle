@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Oct 28 13:00:39 2022
-
-@author: will
-"""
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -13,6 +6,7 @@ Created on Tue Oct 25 11:04:17 2022
 @author: will
 """
 import numpy as np
+import pickle
 matrix = np.load('/home/will/Desktop/LC/wordle/matrix.npy')
 # %timeit groupby1(matrix,5)
 # %timeit groupby2(matrix,5)
@@ -21,7 +15,9 @@ matrix = np.load('/home/will/Desktop/LC/wordle/matrix.npy')
 # %timeit groupby1(matrix[:,:100],1)
 # %timeit groupby2(matrix[:,:100],1)
 
-mapping = dict()
+# mapping = dict()
+with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'rb') as f:
+    mapping = pickle.load(f)
 #l = []
 def entropy(p):
     return np.sum(-p*np.log2(p))
@@ -78,6 +74,8 @@ def wordle(matrix,index,top=0.6,count=2309):
         return min_
 
 wordle(matrix,np.arange(2309))
+with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
+    pickle.dump(mapping, f)
 
 
 class Node():
@@ -135,16 +133,5 @@ def policy_lookup(matrix,index):
                 if min_ == 1:
                     return argmin
     return argmin
-
-
-
-
-
-
-
-
-
-
-
 
 
