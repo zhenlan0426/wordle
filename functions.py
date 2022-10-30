@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Oct 28 13:00:39 2022
-
-@author: will
-"""
-
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -14,7 +7,7 @@ Created on Tue Oct 25 11:04:17 2022
 """
 import numpy as np
 import pickle
-matrix = np.load('matrix.npy')
+matrix = np.load('/home/will/Desktop/LC/wordle/matrix.npy')
 # %timeit groupby1(matrix,5)
 # %timeit groupby2(matrix,5)
 # %timeit groupby1(matrix[:,:500],1)
@@ -23,7 +16,7 @@ matrix = np.load('matrix.npy')
 # %timeit groupby2(matrix[:,:100],1)
 
 # mapping = dict()
-with open('mapping.pkl', 'rb') as f:
+with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'rb') as f:
     mapping = pickle.load(f)
 #l = []
 def entropy(p):
@@ -80,12 +73,10 @@ def wordle(matrix,index,top=0.6,count=2309):
         mapping[tuple(index)] = min_
         return min_
 
-# wordle(matrix,np.arange(2309))
-# with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
-#     pickle.dump(mapping, f)
+wordle(matrix,np.arange(2309))
+with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
+    pickle.dump(mapping, f)
 
-def tuple2num(t):
-    return np.dot(np.array(t),3**np.arange(5))
 
 class Node():
     # Node class will give a explicit decision tree of how to act in each scenario
@@ -99,9 +90,6 @@ class Node():
         
     def set_action(self):
         self.action = self.policy(self.matrix,self.index)
-    
-    def inspect_action(self,num2word):
-        return num2word[self.action]        
     
     def recur(self):
         if not self.IsLeaf:
@@ -122,7 +110,6 @@ def policy_lookup(matrix,index):
     min_,argmin = np.Inf,np.Inf
     count = matrix.shape[1]
     best = np.log2(count)
-    best_val = mapping[tuple(index)] if len(index)>2 else len(index)-1
     for row in range(12953):
         tmp = matrix[row]
         unq,counts = np.unique(tmp,return_counts=True)
@@ -150,5 +137,8 @@ def policy_lookup(matrix,index):
             if finish_ind and (guess_row < min_):
                 min_ = guess_row
                 argmin = row
-                if min_ == best_val:
+                if min_ == 1:
                     return argmin
+    return argmin
+
+
