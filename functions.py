@@ -84,7 +84,8 @@ def wordle(matrix,index,top=0.6,count=2309):
 # with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
 #     pickle.dump(mapping, f)
 
-
+def tuple2num(t):
+    return np.dot(np.array(t),3**np.arange(5))
 
 class Node():
     # Node class will give a explicit decision tree of how to act in each scenario
@@ -98,6 +99,9 @@ class Node():
         
     def set_action(self):
         self.action = self.policy(self.matrix,self.index)
+    
+    def inspect_action(self,num2word):
+        return num2word[self.action]        
     
     def recur(self):
         if not self.IsLeaf:
@@ -148,4 +152,3 @@ def policy_lookup(matrix,index):
                 argmin = row
                 if min_ == best_val:
                     return argmin
-
