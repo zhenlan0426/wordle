@@ -86,6 +86,7 @@ class pointNet(torch.nn.Module):
         self.mainNN = nn.ModuleList([pointNet_block(self.d,agg,dropout,multiple_factor) for _ in range(layers)])
         self.out_linear = MLP(self.d,1,multiple_factor)
         self.w = nn.parameter.Parameter(torch.tensor(0.13663686,device='cuda'))
+        #self.min_ = torch.tensor(1,device='cuda')
         
     def forward(self,data):
         if len(data) == 3:
@@ -102,13 +103,14 @@ class pointNet(torch.nn.Module):
         for model in self.mainNN:
             out = model(out,seg2all,all2seg)
         out = self.out_linear(segment_csr(out,all2seg,reduce=self.agg))
+        #out = torch.maximum(self.min_,out.squeeze() + self.w * torch.log2(length))
         out = out.squeeze() + self.w * torch.log2(length)
         if IsTrain:
             return nn.functional.mse_loss(out, ys)
         else:
             return out
         
-def train(opt,model,epochs,train_dl,val_dl,paras,clip):
+def train(opt,model,epochs,train_dl,val_dl,paras,clip,verbose=True,save=True):
     since = time.time()
     lossBest = 1e6
     opt.zero_grad()
@@ -138,11 +140,12 @@ def train(opt,model,epochs,train_dl,val_dl,paras,clip):
         # save model
         if val_loss<lossBest:
             lossBest = val_loss
-            bestWeight = copy.deepcopy(model.state_dict())   
-        print('epoch:{}, train_loss: {:+.3f}, val_loss: {:+.3f} \n'.format(epoch,train_loss/i,val_loss/j))
+            if save: bestWeight = copy.deepcopy(model.state_dict())   
+        if verbose:
+            print('epoch:{}, train_loss: {:+.3f}, val_loss: {:+.3f} \n'.format(epoch,train_loss/i,val_loss/j))
 
     
-    model.load_state_dict(bestWeight)
+    if save: model.load_state_dict(bestWeight)
     time_elapsed = time.time() - since
-    print('Training completed in {}s'.format(time_elapsed))
-    return model
+    if verbose: print('Training completed in {}s'.format(time_elapsed))
+    return model,lossBest

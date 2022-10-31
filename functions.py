@@ -6,6 +6,7 @@ Created on Tue Oct 25 11:04:17 2022
 @author: will
 """
 import numpy as np
+import torch
 import pickle
 matrix = np.load('/home/will/Desktop/LC/wordle/matrix.npy')
 # %timeit groupby1(matrix,5)
@@ -73,9 +74,29 @@ def wordle(matrix,index,top=0.6,count=2309):
         mapping[tuple(index)] = min_
         return min_
 
-wordle(matrix,np.arange(2309))
-with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
-    pickle.dump(mapping, f)
+def evaluate(matrix,index,policy,count,**kways):
+    # evaluate how many steps does policy take on average
+    if count == 1: return 1
+    if count == 2: return 1.5
+
+    best = np.log2(count)
+    row = policy(matrix,index,**kways)
+    
+    tmp = matrix[row]
+    unq,counts = np.unique(tmp,return_counts=True)
+    ps = counts/count
+    entro = entropy(ps)
+    if entro == best:
+        return 2
+    guess_row = 1
+    for p,u,c in zip(ps,unq,counts):
+        tmp2 = tmp == u
+        guess_row += p * evaluate(matrix[:,tmp2],index[tmp2],policy,c,**kways)
+    return guess_row
+
+# wordle(matrix,np.arange(2309))
+# with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
+#     pickle.dump(mapping, f)
 
 
 class Node():
@@ -142,3 +163,45 @@ def policy_lookup(matrix,index):
     return argmin
 
 
+def policy_model(matrix,index,model,words_embed,top=0.6):
+    count = matrix.shape[1]
+    best = np.log2(count)
+    best_val = 1000
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        if entro == best:
+            return row
+        elif entro > (best * top):
+            index_ = []
+            p_ = []
+            c_ = []
+            value = 1
+            for p,u,c in zip(ps,unq,counts):
+                # only use model when c > 2
+                if c == 1:
+                    continue
+                if c == 2:
+                    value += p
+                else:
+                    p_.append(p)
+                    c_.append(c)
+                    tmp2 = tmp == u
+                    index_.append(index[tmp2])
+            # call NN model to eval
+            if p_:
+                length = torch.tensor(c_,dtype=torch.float32,device='cuda')
+                word = torch.tensor(words_embed[np.concatenate(index_)],device='cuda').long()
+                with torch.no_grad():
+                    out = model((word,length))
+                out = out.detach().cpu().numpy()
+                value += np.dot(np.array(p_),out)
+            if value < best_val:
+                best_val = value
+                best_action = row
+    if best_val == 1000:
+        return policy_model(matrix,index,model,words_embed,top/1.2)
+    else:
+        return best_action
