@@ -9,6 +9,7 @@ import numpy as np
 import torch
 import pickle
 matrix = np.load('/home/will/Desktop/LC/wordle/matrix.npy')
+out = []
 # %timeit groupby1(matrix,5)
 # %timeit groupby2(matrix,5)
 # %timeit groupby1(matrix[:,:500],1)
@@ -79,19 +80,44 @@ def evaluate(matrix,index,policy,count,**kways):
     if count == 1: return 1
     if count == 2: return 1.5
 
-    best = np.log2(count)
+    # best = np.log2(count)
     row = policy(matrix,index,**kways)
     
     tmp = matrix[row]
     unq,counts = np.unique(tmp,return_counts=True)
     ps = counts/count
-    entro = entropy(ps)
-    if entro == best:
-        return 2
+    # entro = entropy(ps)
+    # if entro == best:
+    #     return 2
+    # can be 1, when (G,G,G,G,G) or 242
     guess_row = 1
     for p,u,c in zip(ps,unq,counts):
+        if u == 243: # (G,G,G,G,G)
+            continue # guess_row += p * 0
         tmp2 = tmp == u
         guess_row += p * evaluate(matrix[:,tmp2],index[tmp2],policy,c,**kways)
+    return guess_row
+
+def evaluate_save(matrix,index,policy,count,log_p,**kways):
+    # evaluate how many steps does policy take on average
+    # save all (index,val,log_prob) for training NN model
+    # return val - 1 to account for bug
+    if count == 1: return 1
+    if count == 2: return 1.5
+
+    # best = np.log2(count)
+    row = policy(matrix,index,**kways)
+    
+    tmp = matrix[row]
+    unq,counts = np.unique(tmp,return_counts=True)
+    ps = counts/count
+    guess_row = 1
+    for p,u,c in zip(ps,unq,counts):
+        if u == 243: # (G,G,G,G,G)
+            continue # guess_row += p * 0
+        tmp2 = tmp == u
+        guess_row += p * evaluate_save(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
+    out.append((index,guess_row-1,log_p))
     return guess_row
 
 # wordle(matrix,np.arange(2309))
@@ -166,6 +192,7 @@ def policy_lookup(matrix,index):
 def policy_model(matrix,index,model,words_embed,top=0.6):
     count = matrix.shape[1]
     best = np.log2(count)
+    threshold = best * top
     best_val = 1000
     for row in range(12953):
         tmp = matrix[row]
@@ -174,7 +201,7 @@ def policy_model(matrix,index,model,words_embed,top=0.6):
         entro = entropy(ps)
         if entro == best:
             return row
-        elif entro > (best * top):
+        elif entro > threshold:
             index_ = []
             p_ = []
             c_ = []
