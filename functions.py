@@ -63,6 +63,8 @@ def wordle(matrix,index,top=0.6,count=2309):
             for p,u,c in zip(ps,unq,counts):
                 tmp2 = tmp == u
                 guess_row += p * wordle(matrix[:,tmp2],index[tmp2],count=c)
+                if guess_row > min_:
+                    continue
             if guess_row < min_:
                 min_ = guess_row
                 if min_ == 1:
@@ -92,7 +94,31 @@ def evaluate(matrix,index,policy,count,**kways):
     # can be 1, when (G,G,G,G,G) or 242
     guess_row = 1
     for p,u,c in zip(ps,unq,counts):
-        if u == 243: # (G,G,G,G,G)
+        if u == 242: # (G,G,G,G,G)
+            continue # guess_row += p * 0
+        tmp2 = tmp == u
+        guess_row += p * evaluate(matrix[:,tmp2],index[tmp2],policy,c,**kways)
+    return guess_row
+
+def evaluate_depth(matrix,index,policy,count,**kways):
+    # pass in depth info to policy
+    if count == 1: return 1
+    if count == 2: return 1.5
+
+    # best = np.log2(count)
+    row = policy(matrix,index,**kways)
+    
+    tmp = matrix[row]
+    unq,counts = np.unique(tmp,return_counts=True)
+    ps = counts/count
+    # entro = entropy(ps)
+    # if entro == best:
+    #     return 2
+    # can be 1, when (G,G,G,G,G) or 242
+    guess_row = 1
+    kways['depth'] += 1
+    for p,u,c in zip(ps,unq,counts):
+        if u == 242: # (G,G,G,G,G)
             continue # guess_row += p * 0
         tmp2 = tmp == u
         guess_row += p * evaluate(matrix[:,tmp2],index[tmp2],policy,c,**kways)
@@ -113,7 +139,7 @@ def evaluate_save(matrix,index,policy,count,log_p,**kways):
     ps = counts/count
     guess_row = 1
     for p,u,c in zip(ps,unq,counts):
-        if u == 243: # (G,G,G,G,G)
+        if u == 242: # (G,G,G,G,G)
             continue # guess_row += p * 0
         tmp2 = tmp == u
         guess_row += p * evaluate_save(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
@@ -150,6 +176,41 @@ class Node():
                 node.recur()
                 self.children[u] = node
         
+def policy_entropy_depth(matrix,index,factor,depth):
+    # return the best action given the original matrix and current index
+    # assume a value function mapping, tuple(index) -> val
+    max_,argmax = -np.Inf,-np.Inf
+    count = matrix.shape[1]
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        if prob.size > 0:
+            entro += prob[0] * factor * depth
+        if entro > max_:
+            max_ = entro
+            argmax = row
+    return argmax
+
+def policy_entropy(matrix,index,factor):
+    # return the best action given the original matrix and current index
+    # assume a value function mapping, tuple(index) -> val
+    max_,argmax = -np.Inf,-np.Inf
+    count = matrix.shape[1]
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        if prob.size > 0:
+            entro += prob[0] * factor
+        if entro > max_:
+            max_ = entro
+            argmax = row
+    return argmax
         
 def policy_lookup(matrix,index):
     # return the best action given the original matrix and current index
@@ -189,7 +250,7 @@ def policy_lookup(matrix,index):
     return argmin
 
 
-def policy_model(matrix,index,model,words_embed,top=0.6):
+def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
     count = matrix.shape[1]
     best = np.log2(count)
     threshold = best * top
@@ -225,6 +286,8 @@ def policy_model(matrix,index,model,words_embed,top=0.6):
                     out = model((word,length))
                 out = out.detach().cpu().numpy()
                 value += np.dot(np.array(p_),out)
+                if eps > 0:
+                    value += eps * np.random.randn()
             if value < best_val:
                 best_val = value
                 best_action = row
