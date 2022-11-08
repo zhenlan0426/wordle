@@ -42,8 +42,8 @@ def entropy(p):
 
 def wordle(matrix,index,top=0.6,count=2309):
     # return min expected guesses
-    if count == 1: return 0
-    if count == 2: return 1
+    if count == 1: return 1
+    if count == 2: return 1.5
     if tuple(index) in mapping:
         return mapping[tuple(index)]
     best = np.log2(count)
@@ -54,13 +54,19 @@ def wordle(matrix,index,top=0.6,count=2309):
         unq,counts = np.unique(tmp,return_counts=True)
         ps = counts/count
         entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
         if entro == best:
-            mapping[tuple(index)] = 1
-            return 1
+            threshold = best # wont consider less than best entropy
+            guess_row = 2 - prob # 1 + (1-prob) * 1 + prob * 0
+            if guess_row < min_:
+                min_ = guess_row
         elif entro>threshold:
             #l.append((matrix.shape[1],entro))
             guess_row = 1
             for p,u,c in zip(ps,unq,counts):
+                if u == 242: # (G,G,G,G,G)
+                    continue # guess_row += p * 0
                 tmp2 = tmp == u
                 guess_row += p * wordle(matrix[:,tmp2],index[tmp2],count=c)
                 if guess_row > min_:
@@ -144,6 +150,28 @@ def evaluate_save(matrix,index,policy,count,log_p,**kways):
         tmp2 = tmp == u
         guess_row += p * evaluate_save(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
     out.append((index,guess_row,log_p))
+    return guess_row
+
+def evaluate_saveQ(matrix,index,policy,count,log_p,**kways):
+    # evaluate how many steps does policy take on average
+    # save all (index,val,log_prob) for training NN model
+    # return val - 1 to account for bug
+    if count == 1: return 1
+    if count == 2: return 1.5
+
+    # best = np.log2(count)
+    row = policy(matrix,index,**kways)
+    
+    tmp = matrix[row]
+    unq,counts = np.unique(tmp,return_counts=True)
+    ps = counts/count
+    guess_row = 1
+    for p,u,c in zip(ps,unq,counts):
+        if u == 242: # (G,G,G,G,G)
+            continue # guess_row += p * 0
+        tmp2 = tmp == u
+        guess_row += p * evaluate_save(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
+    out.append((index,guess_row,log_p,row))
     return guess_row
 
 # wordle(matrix,np.arange(2309))
@@ -260,7 +288,15 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
         unq,counts = np.unique(tmp,return_counts=True)
         ps = counts/count
         entro = entropy(ps)
-        if entro > threshold:
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
+        if entro == best:
+            threshold = best # wont consider NN model policy
+            value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
+            if value < best_val:
+                best_val = value
+                best_action = row
+        elif entro > threshold:
             index_ = []
             p_ = []
             c_ = []
@@ -295,48 +331,42 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
         return best_action
 
 
-def policy_modelQ(matrix,index,model,words_embed,top=0.6,eps=0):
+def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top=0.6,eps=0):
     count = matrix.shape[1]
     best = np.log2(count)
     threshold = best * top
     best_val = 1000
-    index_ = []
-    action_ = []
+    actions = []
     for row in range(12953):
         tmp = matrix[row]
         unq,counts = np.unique(tmp,return_counts=True)
         ps = counts/count
         entro = entropy(ps)
-        
-        if entro > threshold:
-            index_ = []
-            p_ = []
-            c_ = []
-            value = 1
-            for p,u,c in zip(ps,unq,counts):
-                # only use model when c > 2
-                if c == 1:
-                    continue
-                if c == 2:
-                    value += p
-                else:
-                    p_.append(p)
-                    c_.append(c)
-                    tmp2 = tmp == u
-                    index_.append(index[tmp2])
-            # call NN model to eval
-            if p_:
-                length = torch.tensor(c_,dtype=torch.float32,device='cuda')
-                word = torch.tensor(words_embed[np.concatenate(index_)],device='cuda').long()
-                with torch.no_grad():
-                    out = model((word,length))
-                out = out.detach().cpu().numpy()
-                value += np.dot(np.array(p_),out)
-                if eps > 0:
-                    value += eps * best * np.random.randn()
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
+        if entro == best:
+            threshold = best # wont consider NN model policy
+            value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
             if value < best_val:
                 best_val = value
                 best_action = row
+        elif entro > threshold:
+            actions.append(row)
+            
+    if actions and threshold<best:
+        # call NN model to eval
+        k = len(index)
+        n = len(actions)
+        length = k*torch.ones(n,dtype=torch.float32,device='cuda')
+        word = torch.tensor(words_embed[index],device='cuda').long().repeat(n,1)
+        actions_tch = torch.tensor(allowed_words_embed[np.array(actions)],device='cuda').long()
+        with torch.no_grad():
+            out = model((word,length,actions_tch))
+        out = out.detach().cpu().numpy()
+        if eps > 0:
+            out = out + eps * best * np.random.randn(n)
+        return actions[np.argmin(out)]
+
     if best_val == 1000:
         return policy_model(matrix,index,model,words_embed,top/1.2)
     else:
