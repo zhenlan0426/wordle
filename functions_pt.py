@@ -52,11 +52,12 @@ def MLP(in_d,out_d,multiple_factor=1,dropout=0.1):
                         Linear(in_d,in_d*multiple_factor),
                         LeakyReLU(inplace=True),
                         Dropout(dropout),
-                        BatchNorm1d(in_d*multiple_factor),
+                        #BatchNorm1d(in_d*multiple_factor),
                         Linear(in_d*multiple_factor,out_d),
                         LeakyReLU(inplace=True),
                         Dropout(dropout),
-                        BatchNorm1d(out_d))
+                        #BatchNorm1d(out_d)
+                        )
 
 class pointNet_block(torch.nn.Module):
     def __init__(self,d,agg,dropout=0.1,multiple_factor=2):
@@ -67,7 +68,8 @@ class pointNet_block(torch.nn.Module):
                         Linear(d*2,d),
                         LeakyReLU(inplace=True),
                         Dropout(dropout),
-                        BatchNorm1d(d))
+                        #BatchNorm1d(d)
+                        )
         self.agg = agg
 
     def forward(self, in_,seg2all,all2seg):
@@ -100,6 +102,41 @@ class pointNet(torch.nn.Module):
         seg2all = torch.cat([torch.ones(l,dtype=torch.long,device=length_int.device)*i for i,l in enumerate(length_int)])
         all2seg = torch.cumsum(torch.cat([torch.tensor([0],device=length_int.device),length_int]),0)
         out = self.embed(words).reshape(-1,self.d)
+        for model in self.mainNN:
+            out = model(out,seg2all,all2seg)
+        out = self.out_linear(segment_csr(out,all2seg,reduce=self.agg))
+        #out = torch.maximum(self.min_,out.squeeze() + self.w * torch.log2(length))
+        out = out.squeeze() + self.w * torch.log2(length)
+        if IsTrain:
+            return nn.functional.mse_loss(out, ys)
+        else:
+            return out
+
+
+class pointNetQ(torch.nn.Module):
+    def __init__(self,layers,embed_size,agg,dropout=0.1,multiple_factor=2):
+        super(pointNetQ, self).__init__()
+        self.embed = Embedding(26, embed_size)
+        self.d = embed_size*5
+        self.agg = agg
+        self.mainNN = nn.ModuleList([pointNet_block(self.d,agg,dropout,multiple_factor) for _ in range(layers)])
+        self.out_linear = MLP(self.d,1,multiple_factor)
+        self.w = nn.parameter.Parameter(torch.tensor(0.13663686,device='cuda'))
+        #self.min_ = torch.tensor(1,device='cuda')
+        
+    def forward(self,data):
+        if len(data) == 4:
+            IsTrain = True
+            words,length,action,ys = data
+        else:
+            IsTrain = False
+            words,length,action = data
+            
+        length_int = length.to(torch.long)
+        seg2all = torch.cat([torch.ones(l,dtype=torch.long,device=length_int.device)*i for i,l in enumerate(length_int)])
+        all2seg = torch.cumsum(torch.cat([torch.tensor([0],device=length_int.device),length_int]),0)
+        action = self.embed(action).reshape(-1,self.d)
+        out = action[seg2all] + self.embed(words).reshape(-1,self.d)
         for model in self.mainNN:
             out = model(out,seg2all,all2seg)
         out = self.out_linear(segment_csr(out,all2seg,reduce=self.agg))

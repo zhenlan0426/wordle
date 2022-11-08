@@ -143,7 +143,7 @@ def evaluate_save(matrix,index,policy,count,log_p,**kways):
             continue # guess_row += p * 0
         tmp2 = tmp == u
         guess_row += p * evaluate_save(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
-    out.append((index,guess_row-1,log_p))
+    out.append((index,guess_row,log_p))
     return guess_row
 
 # wordle(matrix,np.arange(2309))
@@ -260,9 +260,55 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
         unq,counts = np.unique(tmp,return_counts=True)
         ps = counts/count
         entro = entropy(ps)
-        if entro == best:
-            return row
-        elif entro > threshold:
+        if entro > threshold:
+            index_ = []
+            p_ = []
+            c_ = []
+            value = 1
+            for p,u,c in zip(ps,unq,counts):
+                # only use model when c > 2
+                if c == 1:
+                    value += p
+                if c == 2:
+                    value += p * 1.5
+                else:
+                    p_.append(p)
+                    c_.append(c)
+                    tmp2 = tmp == u
+                    index_.append(index[tmp2])
+            # call NN model to eval
+            if p_:
+                length = torch.tensor(c_,dtype=torch.float32,device='cuda')
+                word = torch.tensor(words_embed[np.concatenate(index_)],device='cuda').long()
+                with torch.no_grad():
+                    out = model((word,length))
+                out = out.detach().cpu().numpy()
+                value += np.dot(np.array(p_),out)
+                if eps > 0:
+                    value += eps * best * np.random.randn()
+            if value < best_val:
+                best_val = value
+                best_action = row
+    if best_val == 1000:
+        return policy_model(matrix,index,model,words_embed,top/1.2)
+    else:
+        return best_action
+
+
+def policy_modelQ(matrix,index,model,words_embed,top=0.6,eps=0):
+    count = matrix.shape[1]
+    best = np.log2(count)
+    threshold = best * top
+    best_val = 1000
+    index_ = []
+    action_ = []
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        
+        if entro > threshold:
             index_ = []
             p_ = []
             c_ = []
@@ -287,7 +333,7 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
                 out = out.detach().cpu().numpy()
                 value += np.dot(np.array(p_),out)
                 if eps > 0:
-                    value += eps * np.random.randn()
+                    value += eps * best * np.random.randn()
             if value < best_val:
                 best_val = value
                 best_action = row
