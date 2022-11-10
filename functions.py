@@ -278,7 +278,7 @@ def policy_lookup(matrix,index):
     return argmin
 
 
-def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
+def policy_model(matrix,index,model,words_embed,top=0.6):
     count = matrix.shape[1]
     best = np.log2(count)
     threshold = best * top
@@ -288,14 +288,8 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
         unq,counts = np.unique(tmp,return_counts=True)
         ps = counts/count
         entro = entropy(ps)
-        prob = ps[np.where(unq==242)[0]]
-        prob = prob if prob.size > 0 else 0
         if entro == best:
-            threshold = best # wont consider NN model policy
-            value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
-            if value < best_val:
-                best_val = value
-                best_action = row
+            return row
         elif entro > threshold:
             index_ = []
             p_ = []
@@ -304,9 +298,9 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
             for p,u,c in zip(ps,unq,counts):
                 # only use model when c > 2
                 if c == 1:
-                    value += p
+                    continue
                 if c == 2:
-                    value += p * 1.5
+                    value += p
                 else:
                     p_.append(p)
                     c_.append(c)
@@ -320,8 +314,6 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
                     out = model((word,length))
                 out = out.detach().cpu().numpy()
                 value += np.dot(np.array(p_),out)
-                if eps > 0:
-                    value += eps * best * np.random.randn()
             if value < best_val:
                 best_val = value
                 best_action = row
