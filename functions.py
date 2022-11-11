@@ -17,9 +17,9 @@ out = []
 # %timeit groupby1(matrix[:,:100],1)
 # %timeit groupby2(matrix[:,:100],1)
 
-# mapping = dict()
-with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'rb') as f:
-    mapping = pickle.load(f)
+mapping = dict()
+# with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'rb') as f:
+#     mapping = pickle.load(f)
 #l = []
 def entropy(p):
     return np.sum(-p*np.log2(p))
@@ -239,6 +239,35 @@ def policy_entropy(matrix,index,factor):
             max_ = entro
             argmax = row
     return argmax
+
+def policy_entropy_best(matrix,index,factor):
+    # use optimal end-game policy
+    max_,argmax = -np.Inf,-np.Inf
+    count = matrix.shape[1]
+    best = np.log2(count)
+    only_best = False
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob[0] if prob.size>0 else 0
+        if only_best:
+            if entro == best and prob > max_:
+                max_ = prob
+                argmax = row
+        else:
+            if entro == best:
+                only_best = True
+                max_ = prob
+                argmax = row
+            else:
+                entro += prob * factor
+                if entro > max_:
+                    max_ = entro
+                    argmax = row
+    return argmax
         
 def policy_lookup(matrix,index):
     # return the best action given the original matrix and current index
@@ -334,7 +363,66 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
     else:
         return best_action
 
-
+def policy_model_eps(matrix,index,model,words_embed,top=0.6,eps=0):
+    # eps greedy to randomly pick action from > threshold
+    count = matrix.shape[1]
+    best = np.log2(count)
+    threshold = best * top
+    best_val = 1000
+    random = np.random.rand()<eps
+    if random: action_list = []   
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
+        if entro == best:
+            if threshold == best:
+                value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
+                if value < best_val:
+                    best_val = value
+                    best_action = row
+            else:
+                threshold = best # wont consider NN model policy
+                best_val = 2 - prob
+                best_action = row
+        elif entro > threshold:
+            if random:
+                action_list.append(row)
+            else:
+                index_ = []
+                p_ = []
+                c_ = []
+                value = 1
+                for p,u,c in zip(ps,unq,counts):
+                    # only use model when c > 2
+                    if c == 1:
+                        continue
+                    if c == 2:
+                        value += p * 0.5
+                    else:
+                        p_.append(p)
+                        c_.append(c)
+                        tmp2 = tmp == u
+                        index_.append(index[tmp2])
+                # call NN model to eval
+                if p_:
+                    length = torch.tensor(c_,dtype=torch.float32,device='cuda')
+                    word = torch.tensor(words_embed[np.concatenate(index_)],device='cuda').long()
+                    with torch.no_grad():
+                        out = model((word,length))
+                    out = out.detach().cpu().numpy()
+                    value += np.dot(np.array(p_),out)
+                if value < best_val:
+                    best_val = value
+                    best_action = row
+    if threshold == best: return best_action
+    if ((not random) and best_val == 1000) or (random and len(action_list)==0):
+        return policy_model(matrix,index,model,words_embed,top/1.2)
+    return np.random.choice(action_list) if random else best_action
+    
 def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top=0.6,eps=0):
     count = matrix.shape[1]
     best = np.log2(count)
