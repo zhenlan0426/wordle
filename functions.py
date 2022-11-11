@@ -149,7 +149,7 @@ def evaluate_save(matrix,index,policy,count,log_p,**kways):
             continue # guess_row += p * 0
         tmp2 = tmp == u
         guess_row += p * evaluate_save(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
-    out.append((index,guess_row,log_p))
+    out.append((index,guess_row-1,log_p))
     return guess_row
 
 def evaluate_saveQ(matrix,index,policy,count,log_p,**kways):
@@ -278,7 +278,7 @@ def policy_lookup(matrix,index):
     return argmin
 
 
-def policy_model(matrix,index,model,words_embed,top=0.6):
+def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
     count = matrix.shape[1]
     best = np.log2(count)
     threshold = best * top
@@ -288,8 +288,18 @@ def policy_model(matrix,index,model,words_embed,top=0.6):
         unq,counts = np.unique(tmp,return_counts=True)
         ps = counts/count
         entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
         if entro == best:
-            return row
+            if threshold == best:
+                value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
+                if value < best_val:
+                    best_val = value
+                    best_action = row
+            else:
+                threshold = best # wont consider NN model policy
+                best_val = 2 - prob
+                best_action = row
         elif entro > threshold:
             index_ = []
             p_ = []
@@ -300,7 +310,7 @@ def policy_model(matrix,index,model,words_embed,top=0.6):
                 if c == 1:
                     continue
                 if c == 2:
-                    value += p
+                    value += p * 0.5
                 else:
                     p_.append(p)
                     c_.append(c)
@@ -314,6 +324,8 @@ def policy_model(matrix,index,model,words_embed,top=0.6):
                     out = model((word,length))
                 out = out.detach().cpu().numpy()
                 value += np.dot(np.array(p_),out)
+                if eps > 0:
+                    value += eps * best * np.random.randn()
             if value < best_val:
                 best_val = value
                 best_action = row
