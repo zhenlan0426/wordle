@@ -170,8 +170,8 @@ def evaluate_saveQ(matrix,index,policy,count,log_p,**kways):
         if u == 242: # (G,G,G,G,G)
             continue # guess_row += p * 0
         tmp2 = tmp == u
-        guess_row += p * evaluate_save(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
-    out.append((index,guess_row,log_p,row))
+        guess_row += p * evaluate_saveQ(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
+    out.append((index,guess_row-1,log_p,row))
     return guess_row
 
 # wordle(matrix,np.arange(2309))
@@ -444,8 +444,9 @@ def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top=0.6,eps
                 best_action = row
         elif entro > threshold:
             actions.append(row)
-            
-    if actions and threshold<best:
+    
+    if threshold == best: return best_action
+    if actions:
         # call NN model to eval
         k = len(index)
         n = len(actions)
@@ -459,7 +460,4 @@ def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top=0.6,eps
             out = out + eps * best * np.random.randn(n)
         return actions[np.argmin(out)]
 
-    if best_val == 1000:
-        return policy_model(matrix,index,model,words_embed,top/1.2)
-    else:
-        return best_action
+    return policy_modelQ(matrix,index,model,words_embed,top/1.2)

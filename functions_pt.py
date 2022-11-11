@@ -114,11 +114,12 @@ class pointNet(torch.nn.Module):
 
 
 class pointNetQ(torch.nn.Module):
-    def __init__(self,layers,embed_size,agg,dropout=0.1,multiple_factor=2):
+    def __init__(self,layers,embed_size,agg,dropout=0.1,multiple_factor=2,concat=True):
         super(pointNetQ, self).__init__()
         self.embed = Embedding(26, embed_size)
-        self.d = embed_size*5
+        self.d = embed_size*5*(2 if concat else 1)
         self.agg = agg
+        self.concat = concat
         self.mainNN = nn.ModuleList([pointNet_block(self.d,agg,dropout,multiple_factor) for _ in range(layers)])
         self.out_linear = MLP(self.d,1,multiple_factor)
         self.w = nn.parameter.Parameter(torch.tensor(0.13663686,device='cuda'))
@@ -136,7 +137,7 @@ class pointNetQ(torch.nn.Module):
         seg2all = torch.cat([torch.ones(l,dtype=torch.long,device=length_int.device)*i for i,l in enumerate(length_int)])
         all2seg = torch.cumsum(torch.cat([torch.tensor([0],device=length_int.device),length_int]),0)
         action = self.embed(action).reshape(-1,self.d)
-        out = action[seg2all] + self.embed(words).reshape(-1,self.d)
+        out = torch.cat([action[seg2all],self.embed(words).reshape(-1,self.d)],1) if self.concat else action[seg2all] + self.embed(words).reshape(-1,self.d)
         for model in self.mainNN:
             out = model(out,seg2all,all2seg)
         out = self.out_linear(segment_csr(out,all2seg,reduce=self.agg))
