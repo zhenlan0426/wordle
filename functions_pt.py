@@ -136,8 +136,9 @@ class pointNetQ(torch.nn.Module):
         length_int = length.to(torch.long)
         seg2all = torch.cat([torch.ones(l,dtype=torch.long,device=length_int.device)*i for i,l in enumerate(length_int)])
         all2seg = torch.cumsum(torch.cat([torch.tensor([0],device=length_int.device),length_int]),0)
-        action = self.embed(action).reshape(-1,self.d)
-        out = torch.cat([action[seg2all],self.embed(words).reshape(-1,self.d)],1) if self.concat else action[seg2all] + self.embed(words).reshape(-1,self.d)
+        action = self.embed(action)
+        out = torch.cat([action.reshape(-1,self.d//2)[seg2all],self.embed(words).reshape(-1,self.d//2)],1) if self.concat \
+                else action[seg2all].reshape(-1,self.d) + self.embed(words).reshape(-1,self.d)
         for model in self.mainNN:
             out = model(out,seg2all,all2seg)
         out = self.out_linear(segment_csr(out,all2seg,reduce=self.agg))

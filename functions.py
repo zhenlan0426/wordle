@@ -359,7 +359,7 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
                 best_val = value
                 best_action = row
     if best_val == 1000:
-        return policy_model(matrix,index,model,words_embed,top/1.2)
+        return policy_model(matrix,index,model,words_embed,top/1.2,eps)
     else:
         return best_action
 
@@ -420,7 +420,7 @@ def policy_model_eps(matrix,index,model,words_embed,top=0.6,eps=0):
                     best_action = row
     if threshold == best: return best_action
     if ((not random) and best_val == 1000) or (random and len(action_list)==0):
-        return policy_model(matrix,index,model,words_embed,top/1.2)
+        return policy_model_eps(matrix,index,model,words_embed,top/1.2,eps)
     return np.random.choice(action_list) if random else best_action
     
 def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top=0.6,eps=0):
@@ -460,4 +460,4 @@ def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top=0.6,eps
             out = out + eps * best * np.random.randn(n)
         return actions[np.argmin(out)]
 
-    return policy_modelQ(matrix,index,model,words_embed,top/1.2)
+    return policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top/1.2,eps)
