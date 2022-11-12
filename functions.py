@@ -307,7 +307,7 @@ def policy_lookup(matrix,index):
     return argmin
 
 
-def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
+def policy_model(matrix,index,model,words_embed,top,eps):
     count = matrix.shape[1]
     best = np.log2(count)
     threshold = best * top
@@ -363,7 +363,7 @@ def policy_model(matrix,index,model,words_embed,top=0.6,eps=0):
     else:
         return best_action
 
-def policy_model_eps(matrix,index,model,words_embed,top=0.6,eps=0):
+def policy_model_eps(matrix,index,model,words_embed,top,eps):
     # eps greedy to randomly pick action from > threshold
     count = matrix.shape[1]
     best = np.log2(count)
@@ -423,7 +423,7 @@ def policy_model_eps(matrix,index,model,words_embed,top=0.6,eps=0):
         return policy_model_eps(matrix,index,model,words_embed,top/1.2,eps)
     return np.random.choice(action_list) if random else best_action
     
-def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top=0.6,eps=0):
+def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top,eps):
     count = matrix.shape[1]
     best = np.log2(count)
     threshold = best * top
