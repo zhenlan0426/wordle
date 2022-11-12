@@ -18,6 +18,7 @@ out = []
 # %timeit groupby2(matrix[:,:100],1)
 
 mapping = dict()
+policy_map = dict()
 # with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'rb') as f:
 #     mapping = pickle.load(f)
 #l = []
@@ -70,7 +71,7 @@ def wordle(matrix,index,top=0.6,count=2309):
                 tmp2 = tmp == u
                 guess_row += p * wordle(matrix[:,tmp2],index[tmp2],count=c)
                 if guess_row > min_:
-                    continue
+                    break
             if guess_row < min_:
                 min_ = guess_row
                 if min_ == 1:
@@ -151,6 +152,32 @@ def evaluate_save(matrix,index,policy,count,log_p,**kways):
         guess_row += p * evaluate_save(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
     out.append((index,guess_row-1,log_p))
     return guess_row
+
+def evaluate_search_save(matrix,index,policy,count,**kways):
+    # policy return top k results in a list
+    if count == 1: return 1
+    if count == 2: return 1.5
+
+    # best = np.log2(count)
+    rows = policy(matrix,index,**kways)
+    min_ = 1000
+    for row in rows:
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        guess_row = 1
+        for p,u,c in zip(ps,unq,counts):
+            if u == 242: # (G,G,G,G,G)
+                continue # guess_row += p * 0
+            tmp2 = tmp == u
+            guess_row += p * evaluate_search_save(matrix[:,tmp2],index[tmp2],policy,c,**kways)
+            if guess_row > min_:
+                break
+        if guess_row < min_:
+            min_ = guess_row
+            argmin_ = row
+    policy_map[tuple(index)] = (argmin_,min_)
+    return min_
 
 def evaluate_saveQ(matrix,index,policy,count,log_p,**kways):
     # evaluate how many steps does policy take on average
@@ -363,6 +390,65 @@ def policy_model(matrix,index,model,words_embed,top,eps):
     else:
         return best_action
 
+def policy_model_topK(matrix,index,model,words_embed,top,k):
+    count = matrix.shape[1]
+    best = np.log2(count)
+    threshold = best * top
+    actions = []
+    values = []
+    best_val = 1000
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
+        if entro == best:
+            if threshold == best:
+                value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
+                if value < best_val:
+                    best_val = value
+                    best_action = row
+            else:
+                threshold = best # wont consider NN model policy
+                best_val = 2 - prob
+                best_action = row
+        elif entro > threshold:
+            index_ = []
+            p_ = []
+            c_ = []
+            value = 1
+            for p,u,c in zip(ps,unq,counts):
+                # only use model when c > 2
+                if c == 1:
+                    continue
+                if c == 2:
+                    value += p * 0.5
+                else:
+                    p_.append(p)
+                    c_.append(c)
+                    tmp2 = tmp == u
+                    index_.append(index[tmp2])
+            # call NN model to eval
+            if p_:
+                length = torch.tensor(c_,dtype=torch.float32,device='cuda')
+                word = torch.tensor(words_embed[np.concatenate(index_)],device='cuda').long()
+                with torch.no_grad():
+                    out = model((word,length))
+                out = out.detach().cpu().numpy()
+                value += np.dot(np.array(p_),out)
+            actions.append(row)
+            values.append(value)
+            
+    if threshold == best: return [best_action]
+    if len(actions)==0:
+        return policy_model_topK(matrix,index,model,words_embed,top/1.2,k)
+    actions = np.array(actions)
+    values = np.array(values)
+    argsort = np.argsort(values)
+    return actions[argsort][:k]
+    
 def policy_model_eps(matrix,index,model,words_embed,top,eps):
     # eps greedy to randomly pick action from > threshold
     count = matrix.shape[1]
