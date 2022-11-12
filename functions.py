@@ -390,6 +390,82 @@ def policy_model(matrix,index,model,words_embed,top,eps):
     else:
         return best_action
 
+
+def policy_model_vector(matrix,index,model,words_embed,top,eps,k):
+    # model is a wrapped model that takes c_, index_,words_embed as inputs
+    # and returns a numpy array
+    # k is None, then return argmin
+    count = matrix.shape[1]
+    best = np.log2(count)
+    threshold = best * top
+    best_val = 1000
+    index_ = []
+    p_ = []
+    c_ = []
+    values_ = []
+    actions_ = []
+    counter_ = [0]
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
+        if entro == best:
+            if threshold == best:
+                value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
+                if value < best_val:
+                    best_val = value
+                    best_action = row
+            else:
+                threshold = best # wont consider NN model policy
+                best_val = 2 - prob
+                best_action = row
+        elif entro > threshold:
+            value = 1
+            for p,u,c in zip(ps,unq,counts):
+                # only use model when c > 2
+                if c == 1:
+                    continue
+                if c == 2:
+                    value += p * 0.5
+                else:
+                    p_.append(p)
+                    c_.append(c)
+                    index_.append(index[tmp == u])
+            actions_.append(row)
+            values_.append(value)
+            counter_.append(len(ps))
+            # # call NN model to eval
+            # if p_:
+            #     length = torch.tensor(c_,dtype=torch.float32,device='cuda')
+            #     word = torch.tensor(words_embed[np.concatenate(index_)],device='cuda').long()
+            #     with torch.no_grad():
+            #         out = model((word,length))
+            #     out = out.detach().cpu().numpy()
+            #     value += np.dot(np.array(p_),out)
+            #     if eps > 0:
+            #         value += eps * best * np.random.randn()
+            # if value < best_val:
+            #     best_val = value
+            #     best_action = row
+    if threshold==best: return best_action if k is None else [best_action]
+    if len(values_)==0:
+        return policy_model_vector(matrix,index,model,words_embed,top/1.2,eps,k)
+    out = model(c_, index_,words_embed)
+    n = len(values_)
+    values_ = np.array(values_)
+    p_ = np.array(p_)
+    counter_ = np.cumsum(np.array(counter_))
+    for i in range(n):
+        values_[i] += np.dot(out[counter_[i]:counter_[i+1]],p[counter_[i]:counter_[i+1]])
+    if eps>0:
+        values_ += eps * best * np.random.randn(n)
+    actions_ = np.array(actions_)
+    return actions_[np.argmin(values_)] if k is None else actions_[np.argsort(values_)][:k]
+
+
 def policy_model_topK(matrix,index,model,words_embed,top,k):
     count = matrix.shape[1]
     best = np.log2(count)
