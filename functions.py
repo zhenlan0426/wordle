@@ -56,7 +56,7 @@ def wordle(matrix,index,top=0.6,count=2309):
         ps = counts/count
         entro = entropy(ps)
         prob = ps[np.where(unq==242)[0]]
-        prob = prob if prob.size > 0 else 0
+        prob = prob[0] if prob.size > 0 else 0
         if entro == best:
             threshold = best # wont consider less than best entropy
             guess_row = 2 - prob # 1 + (1-prob) * 1 + prob * 0
@@ -144,11 +144,12 @@ def evaluate_save(matrix,index,policy,count,log_p,**kways):
     tmp = matrix[row]
     unq,counts = np.unique(tmp,return_counts=True)
     ps = counts/count
-    entro = entropy(ps)
-    if entro == np.log2(count): 
-        prob = ps[np.where(unq==242)[0]]
-        prob = prob if prob.size > 0 else 0
-        return 2 - prob
+    # # dont save end-game in training data
+    # entro = entropy(ps)
+    # if entro == np.log2(count): 
+    #     prob = ps[np.where(unq==242)[0]]
+    #     prob = prob[0] if prob.size > 0 else 0
+    #     return 2 - prob
     guess_row = 1
     for p,u,c in zip(ps,unq,counts):
         if u == 242: # (G,G,G,G,G)
@@ -202,7 +203,7 @@ def evaluate_saveQ(matrix,index,policy,count,log_p,**kways):
     entro = entropy(ps)
     if entro == np.log2(count): 
         prob = ps[np.where(unq==242)[0]]
-        prob = prob if prob.size > 0 else 0
+        prob = prob[0] if prob.size > 0 else 0
         return 2 - prob
     guess_row = 1
     for p,u,c in zip(ps,unq,counts):
@@ -311,7 +312,7 @@ def policy_entropy_best_topK(matrix,index,k):
     if only_best:
         return [argmax]
     entros = np.array(entros)
-    return np.argsort(entros)[:k]
+    return np.argsort(entros)[-k:]
         
 def policy_lookup(matrix,index):
     # return the best action given the original matrix and current index
@@ -362,7 +363,7 @@ def policy_model(matrix,index,model,words_embed,top,eps):
         ps = counts/count
         entro = entropy(ps)
         prob = ps[np.where(unq==242)[0]]
-        prob = prob if prob.size > 0 else 0
+        prob = prob[0] if prob.size > 0 else 0
         if entro == best:
             if threshold == best:
                 value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
@@ -428,7 +429,7 @@ def policy_model(matrix,index,model,words_embed,top,eps):
 #         ps = counts/count
 #         entro = entropy(ps)
 #         prob = ps[np.where(unq==242)[0]]
-#         prob = prob if prob.size > 0 else 0
+#         prob = prob[0] if prob.size > 0 else 0
 #         if entro == best:
 #             if threshold == best:
 #                 value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
@@ -496,7 +497,7 @@ def policy_model_topK(matrix,index,model,words_embed,top,k):
         ps = counts/count
         entro = entropy(ps)
         prob = ps[np.where(unq==242)[0]]
-        prob = prob if prob.size > 0 else 0
+        prob = prob[0] if prob.size > 0 else 0
         if entro == best:
             if threshold == best:
                 value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
@@ -556,7 +557,7 @@ def policy_model_eps(matrix,index,model,words_embed,top,eps):
         ps = counts/count
         entro = entropy(ps)
         prob = ps[np.where(unq==242)[0]]
-        prob = prob if prob.size > 0 else 0
+        prob = prob[0] if prob.size > 0 else 0
         if entro == best:
             if threshold == best:
                 value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
@@ -614,7 +615,7 @@ def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top,eps):
         ps = counts/count
         entro = entropy(ps)
         prob = ps[np.where(unq==242)[0]]
-        prob = prob if prob.size > 0 else 0
+        prob = prob[0] if prob.size > 0 else 0
         if entro == best:
             threshold = best # wont consider NN model policy
             value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
