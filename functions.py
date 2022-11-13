@@ -144,6 +144,11 @@ def evaluate_save(matrix,index,policy,count,log_p,**kways):
     tmp = matrix[row]
     unq,counts = np.unique(tmp,return_counts=True)
     ps = counts/count
+    entro = entropy(ps)
+    if entro == np.log2(count): 
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
+        return 2 - prob
     guess_row = 1
     for p,u,c in zip(ps,unq,counts):
         if u == 242: # (G,G,G,G,G)
@@ -157,7 +162,9 @@ def evaluate_search_save(matrix,index,policy,count,**kways):
     # policy return top k results in a list
     if count == 1: return 1
     if count == 2: return 1.5
-
+    if tuple(index) in policy_map:
+        return policy_map[tuple(index)][1]
+    
     # best = np.log2(count)
     rows = policy(matrix,index,**kways)
     min_ = 1000
@@ -192,13 +199,18 @@ def evaluate_saveQ(matrix,index,policy,count,log_p,**kways):
     tmp = matrix[row]
     unq,counts = np.unique(tmp,return_counts=True)
     ps = counts/count
+    entro = entropy(ps)
+    if entro == np.log2(count): 
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob if prob.size > 0 else 0
+        return 2 - prob
     guess_row = 1
     for p,u,c in zip(ps,unq,counts):
         if u == 242: # (G,G,G,G,G)
             continue # guess_row += p * 0
         tmp2 = tmp == u
         guess_row += p * evaluate_saveQ(matrix[:,tmp2],index[tmp2],policy,c,log_p+np.log(p),**kways)
-    out.append((index,guess_row-1,log_p,row))
+    out.append((index,guess_row-1,log_p,row,entro))
     return guess_row
 
 # wordle(matrix,np.arange(2309))
@@ -270,6 +282,36 @@ def policy_entropy_best(matrix,index,factor):
                     max_ = entro
                     argmax = row
     return argmax
+
+def policy_entropy_best_topK(matrix,index,k):
+    # use optimal end-game policy
+    max_,argmax = -np.Inf,-np.Inf
+    count = matrix.shape[1]
+    best = np.log2(count)
+    only_best = False
+    entros = []
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob[0] if prob.size>0 else 0
+        if only_best:
+            if entro == best and prob > max_:
+                max_ = prob
+                argmax = row
+        else:
+            if entro == best:
+                only_best = True
+                max_ = prob
+                argmax = row
+            else:
+                entros.append(entro)
+    if only_best:
+        return [argmax]
+    entros = np.array(entros)
+    return np.argsort(entros)[:k]
         
 def policy_lookup(matrix,index):
     # return the best action given the original matrix and current index
