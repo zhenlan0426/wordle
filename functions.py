@@ -205,31 +205,6 @@ def evaluate_saveQ(matrix,index,policy,count,log_p,**kways):
 # with open('/home/will/Desktop/LC/wordle/mapping.pkl', 'wb') as f:
 #     pickle.dump(mapping, f)
 
-
-class Node():
-    # Node class will give a explicit decision tree of how to act in each scenario
-    def __init__(self,matrix,index,policy):
-        self.index = index
-        self.policy = policy
-        self.IsLeaf = index.shape[0]==1
-        self.action = None
-        self.children = {}
-        self.matrix = matrix
-        
-    def set_action(self):
-        self.action = self.policy(self.matrix,self.index)
-    
-    def recur(self):
-        if not self.IsLeaf:
-            if self.action is None:
-                self.set_action()
-            tmp = self.matrix[self.action]
-            unq = np.unique(tmp)
-            for u in unq:
-                tmp2 = tmp == u
-                node = Node(self.matrix[:,tmp2],self.index[tmp2],self.policy)
-                node.recur()
-                self.children[u] = node
         
 def policy_entropy_depth(matrix,index,factor,depth):
     # return the best action given the original matrix and current index
