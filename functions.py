@@ -201,10 +201,10 @@ def evaluate_saveQ(matrix,index,policy,count,log_p,**kways):
     unq,counts = np.unique(tmp,return_counts=True)
     ps = counts/count
     entro = entropy(ps)
-    if entro == np.log2(count): 
-        prob = ps[np.where(unq==242)[0]]
-        prob = prob[0] if prob.size > 0 else 0
-        return 2 - prob
+    # if entro == np.log2(count): 
+    #     prob = ps[np.where(unq==242)[0]]
+    #     prob = prob[0] if prob.size > 0 else 0
+    #     return 2 - prob
     guess_row = 1
     for p,u,c in zip(ps,unq,counts):
         if u == 242: # (G,G,G,G,G)
@@ -609,6 +609,7 @@ def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top,eps):
     threshold = best * top
     best_val = 1000
     actions = []
+    entros = []
     for row in range(12953):
         tmp = matrix[row]
         unq,counts = np.unique(tmp,return_counts=True)
@@ -624,20 +625,67 @@ def policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top,eps):
                 best_action = row
         elif entro > threshold:
             actions.append(row)
-    
+            entros.append(entro)
+            
     if threshold == best: return best_action
     if actions:
         # call NN model to eval
         k = len(index)
         n = len(actions)
-        length = k*torch.ones(n,dtype=torch.float32,device='cuda')
+        length = k*torch.ones(n,dtype=torch.long,device='cuda')
         word = torch.tensor(words_embed[index],device='cuda').long().repeat(n,1)
         actions_tch = torch.tensor(allowed_words_embed[np.array(actions)],device='cuda').long()
+        entros = torch.tensor(entros,dtype=torch.float32,device='cuda')
+        
         with torch.no_grad():
-            out = model((word,length,actions_tch))
+            out = model((word,length,actions_tch,entros))
         out = out.detach().cpu().numpy()
         if eps > 0:
             out = out + eps * best * np.random.randn(n)
         return actions[np.argmin(out)]
 
     return policy_modelQ(matrix,index,model,words_embed,allowed_words_embed,top/1.2,eps)
+
+
+def policy_modelQ_rep(matrix,index,model,words_embed,top,eps):
+    count = matrix.shape[1]
+    best = np.log2(count)
+    threshold = best * top
+    best_val = 1000
+    actions = []
+    entros = []
+    for row in range(12953):
+        tmp = matrix[row]
+        unq,counts = np.unique(tmp,return_counts=True)
+        ps = counts/count
+        entro = entropy(ps)
+        prob = ps[np.where(unq==242)[0]]
+        prob = prob[0] if prob.size > 0 else 0
+        if entro == best:
+            threshold = best # wont consider NN model policy
+            value = 2 - prob # 1 + (1-prob) * 1 + prob * 0
+            if value < best_val:
+                best_val = value
+                best_action = row
+        elif entro > threshold:
+            actions.append(row)
+            entros.append(entro)
+            
+    if threshold == best: return best_action
+    if actions:
+        # call NN model to eval
+        k = len(index)
+        n = len(actions)
+        length = k*torch.ones(n,dtype=torch.long,device='cuda')
+        word = torch.tensor(words_embed[index],device='cuda').long().repeat(n,1)
+        actions_tch = torch.tensor(matrix[np.array(actions)].reshape(k*n),device='cuda').long()
+        entros = torch.tensor(entros,dtype=torch.float32,device='cuda')
+        
+        with torch.no_grad():
+            out = model((word,length,actions_tch,entros))
+        out = out.detach().cpu().numpy()
+        if eps > 0:
+            out = out + eps * best * np.random.randn(n)
+        return actions[np.argmin(out)]
+
+    return policy_modelQ_rep(matrix,index,model,words_embed,top/1.2,eps)

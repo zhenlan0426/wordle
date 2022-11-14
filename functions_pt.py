@@ -126,14 +126,14 @@ class pointNetQ(torch.nn.Module):
         #self.min_ = torch.tensor(1,device='cuda')
         
     def forward(self,data):
-        if len(data) == 4:
+        if len(data) == 5:
             IsTrain = True
-            words,length,action,ys = data
+            words,length_int,action,entro,ys = data
         else:
             IsTrain = False
-            words,length,action = data
+            words,length_int,action,entro = data
             
-        length_int = length.to(torch.long)
+
         seg2all = torch.cat([torch.ones(l,dtype=torch.long,device=length_int.device)*i for i,l in enumerate(length_int)])
         all2seg = torch.cumsum(torch.cat([torch.tensor([0],device=length_int.device),length_int]),0)
         action = self.embed(action)
@@ -143,7 +143,43 @@ class pointNetQ(torch.nn.Module):
             out = model(out,seg2all,all2seg)
         out = self.out_linear(segment_csr(out,all2seg,reduce=self.agg))
         #out = torch.maximum(self.min_,out.squeeze() + self.w * torch.log2(length))
-        out = out.squeeze() + self.w * torch.log2(length)
+        out = out.squeeze() + self.w * entro
+        if IsTrain:
+            return nn.functional.mse_loss(out, ys)
+        else:
+            return out
+
+class pointNetQ_rep(torch.nn.Module):
+    def __init__(self,layers,embed_size,agg,dropout=0.1,multiple_factor=2,concat=True):
+        super(pointNetQ_rep, self).__init__()
+        self.embed = Embedding(26, embed_size)
+        self.embed_action = Embedding(243, embed_size*5)
+        self.d = embed_size*5*(2 if concat else 1)
+        self.agg = agg
+        self.concat = concat
+        self.mainNN = nn.ModuleList([pointNet_block(self.d,agg,dropout,multiple_factor) for _ in range(layers)])
+        self.out_linear = MLP(self.d,1,multiple_factor)
+        self.w = nn.parameter.Parameter(torch.tensor(0.13663686,device='cuda'))
+        #self.min_ = torch.tensor(1,device='cuda')
+        
+    def forward(self,data):
+        if len(data) == 5:
+            IsTrain = True
+            words,length_int,action,entro,ys = data
+        else:
+            IsTrain = False
+            words,length_int,action,entro = data
+            
+
+        seg2all = torch.cat([torch.ones(l,dtype=torch.long,device=length_int.device)*i for i,l in enumerate(length_int)])
+        all2seg = torch.cumsum(torch.cat([torch.tensor([0],device=length_int.device),length_int]),0)
+        out = torch.cat([self.embed_action(action),self.embed(words).reshape(-1,self.d//2)],1) if self.concat \
+                else self.embed_action(action) + self.embed(words).reshape(-1,self.d)
+        for model in self.mainNN:
+            out = model(out,seg2all,all2seg)
+        out = self.out_linear(segment_csr(out,all2seg,reduce=self.agg))
+        #out = torch.maximum(self.min_,out.squeeze() + self.w * torch.log2(length))
+        out = out.squeeze() + self.w * entro
         if IsTrain:
             return nn.functional.mse_loss(out, ys)
         else:
